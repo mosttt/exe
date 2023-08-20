@@ -1,0 +1,29 @@
+[package]
+name = "exe"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ssh2 = "0.9"
+anyhow = "1.0"
+bytes = "1"
+tokio = { version = "1.29.1", features = ["full"] }
+clap = { version = "4.3.19", features = ["derive"] }
+serde = { version = "1.0.177", features = ["derive"] }
+serde_yaml = "0.9.25"
+console = "0.15.7"
+
+[target.aarch64-unknown-linux-gnu.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
+[target.aarch64-unknown-linux-musl.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
+
+
+[profile.release]
+lto = true
+opt-level = "s"
+strip = true
+panic = "abort"
+codegen-units = 1
