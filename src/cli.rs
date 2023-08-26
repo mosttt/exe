@@ -31,6 +31,9 @@ pub(crate) struct Log {
     pub(crate) id: Option<String>,
 
     #[arg(long)]
+    pub(crate) all_config: Option<Box<Path>>,
+
+    #[arg(long)]
     pub(crate) all_id: bool,
 }
 

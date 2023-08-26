@@ -15,6 +15,7 @@ use std::env;
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use tokio::fs;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -54,7 +55,7 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Log(log) => {
-            if log.all_id == true {
+            if log.all_id {
                 let exe_list = get_all_executable(log.config.clone()).await?;
 
                 let mut running_list = Vec::new();
@@ -86,20 +87,72 @@ async fn main() -> Result<()> {
                     };
                     println!("id: {} is running: {}", style(id).cyan(), is_running);
                 });
-            } else {
-                let x = get_executable(log.config.clone(), log.id.clone()).await?;
-                let is_running = x.check_remote_server_process_is_running()?;
-                let log = x.show_remote_server_process_log()?;
-
-                let is_running = if is_running {
-                    style(is_running).green()
-                } else {
-                    style(is_running).red()
-                };
-
-                println!("log:\n{}\n", log);
-                println!("is running: {}\n", is_running);
+                return Ok(());
             }
+            if log.all_config.is_some() {
+                let exe_list = get_all_config_executable(log.all_config.clone().unwrap()).await?;
+                let mut all_no_running = Vec::new();
+                let mut all_task_count = 0;
+                let mut all_no_running_task_count = 0;
+
+                exe_list.iter().for_each(|e| {
+                    println!("\nconfig: {}", style(e.0.as_str()).yellow());
+                    let mut no_running = Vec::new();
+
+                    e.1.iter().for_each(|(id, x)| {
+                        all_task_count += 1;
+                        let is_running = x.check_remote_server_process_is_running().unwrap();
+                        let is_running = if is_running {
+                            style(is_running).green()
+                        } else {
+                            all_no_running_task_count += 1;
+                            no_running.push(id);
+                            style(is_running).red()
+                        };
+                        println!("id: {} is running: {}", style(id).cyan(), is_running);
+                    });
+
+                    if no_running.len() == 0 {
+                        println!("There are a {} of ten tasks, all of which are running.", style(e.1.len()).cyan());
+                    } else {
+                        println!("There are a total of {} tasks, of which {} are not running.", style(e.1.len()).cyan(), style(no_running.len()).red());
+                        print!("id: ");
+                        no_running.iter().for_each(|id| {
+                            print!("{} ", style(id).red());
+                        });
+                        println!("are not running.");
+                        all_no_running.push((e.0.as_str().to_owned(), no_running));
+                    }
+                    println!("---------------------");
+                });
+
+                if all_no_running.len() == 0 {
+                    println!("There are a {} of ten tasks, all of which are running.", style(all_task_count).cyan());
+                }else {
+                    println!("There are a total of {} tasks, of which {} are not running.", style(all_task_count).cyan(), style(all_no_running_task_count).red());
+                    all_no_running.iter().for_each(|(config_name, no_running_id)| {
+                        println!("config: {}", style(config_name).yellow());
+                        print!("id: ");
+                        no_running_id.iter().for_each(|id| {
+                            print!("{} ", style(id).red());
+                        });
+                        println!("\n");
+                    });
+                }
+                return Ok(());
+            }
+            let x = get_executable(log.config.clone(), log.id.clone()).await?;
+            let is_running = x.check_remote_server_process_is_running()?;
+            let log = x.show_remote_server_process_log()?;
+
+            let is_running = if is_running {
+                style(is_running).green()
+            } else {
+                style(is_running).red()
+            };
+
+            println!("log:\n{}\n", log);
+            println!("is running: {}\n", is_running);
         }
     }
     Ok(())
@@ -185,4 +238,72 @@ async fn get_all_executable(config: Option<Box<Path>>) -> Result<Vec<(String, Ex
         .collect();
 
     Ok(executable_list)
+}
+
+async fn get_all_config_executable(
+    config_dir: Box<Path>,
+) -> Result<Vec<(String, Vec<(String, Executable)>)>> {
+    let mut config_files = Vec::new();
+
+    let mut dir = fs::read_dir(config_dir.as_ref()).await?;
+    while let Some(d) = dir.next_entry().await? {
+        let path = d.path();
+        if path.is_file() {
+            let filename = path.file_name().unwrap().to_str().unwrap();
+            if filename.starts_with("exe-") && filename.ends_with("yaml") {
+                config_files.push(path);
+            }
+        }
+    }
+
+    let mut config_and_ssh_client_list = Vec::new();
+
+    for config_file in config_files {
+        let config = Config::load(config_file.as_path()).await?;
+        let ssh_account = &config.ssh_account;
+        let ssh_client = Rc::new(get_ssh_client(
+            &ssh_account.addr,
+            &ssh_account.username,
+            &ssh_account.password,
+        )?);
+        config_and_ssh_client_list.push((config_file, config, ssh_client));
+    }
+
+    let executable_list: Vec<_> = config_and_ssh_client_list
+        .into_iter()
+        .map(|(config_filepath, config, ssh_client)| {
+            let config_name = config_filepath
+                .file_stem()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_owned();
+
+            let exe = config
+                .executable_config_list
+                .into_iter()
+                .map(|e| {
+                    let executable = Executable::new(
+                        ssh_client.clone(),
+                        e.executable_file_name,
+                        e.remote_path,
+                        e.local_path,
+                    );
+                    (e.id, executable)
+                })
+                .collect();
+            (config_name, exe)
+        })
+        .collect();
+
+    Ok(executable_list)
+}
+
+#[cfg(test)]
+mod test {
+    use crate::get_all_config_executable;
+    use std::path::Path;
+
+    #[tokio::test]
+    async fn t() {}
 }
