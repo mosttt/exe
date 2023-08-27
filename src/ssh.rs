@@ -120,20 +120,9 @@ impl SSHClient {
 
 #[cfg(test)]
 mod test {
-    use crate::ssh::SSHClient;
-    use std::net::TcpStream;
-
+   
     #[tokio::test]
     async fn t() {
-        let tcp = TcpStream::connect("192.168.1.137:22").unwrap();
-        let client = SSHClient::new(tcp);
-        client.auth_by_password("root", "123456789");
-        let files = client
-            .read_dir("/mnt/usb/disk1/pixiv-lolicon-spider")
-            .unwrap();
-        for file in files.iter().filter(|&x| x.1.is_file()) {
-            let (filename, stat) = file;
-            println!("{}: {:?}", filename.to_str().unwrap(), stat);
-        }
+       
     }
 }
