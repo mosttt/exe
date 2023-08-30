@@ -1,4 +1,4 @@
 # exe
 upload app and executable operation
 
-#![截图](/assets/img/screenshoot.png)
+![截图](/assets/img/screenshoot.png)
